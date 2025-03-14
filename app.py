@@ -1,23 +1,18 @@
 import os
 import yt_dlp
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, Response, render_template_string
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Folder to store the downloaded videos
-DOWNLOAD_FOLDER = 'downloads'
-app.config['UPLOAD_FOLDER'] = DOWNLOAD_FOLDER
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
-
 def download_video(url):
-    """Download video from any social media platform"""
+    """Download video from any social media platform to a temporary file."""
     ydl_opts = {
         'format': 'best',
         'quiet': False,
         'noplaylist': True,
         'extractaudio': False,
-        'outtmpl': os.path.join(DOWNLOAD_FOLDER, 'temp_video.%(ext)s'),  # Save video in the download folder
+        'outtmpl': 'temp_video.%(ext)s',  # Save as a temporary file
     }
 
     try:
@@ -43,7 +38,6 @@ def index():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>SNA Downloader</title>
-        <!-- Bootstrap CSS link -->
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             #loading {
@@ -64,7 +58,7 @@ def index():
     <body class="d-flex align-items-center justify-content-center vh-100 bg-light">
         <div class="container">
             <h1 class="text-center mb-5">Welcome To SNA Video Downloader</h1>
-            <h6 class="text-center mb-4">Can download from FaceBook , YouTube , TikTok , Others..</h6>
+            <h6 class="text-center mb-4">Can download from FaceBook, YouTube, TikTok, Others..</h6>
             <div class="d-flex justify-content-center">
                 <form id="video-form" action="/download" method="POST" class="w-50">
                     <div class="mb-3">
@@ -75,62 +69,49 @@ def index():
                 </form>
             </div>
 
-            <!-- Loading indicator -->
-                <div class="d-flex justify-content-center align-items-center flex-column">
-                    <div id="loading" class="mt-2">
-                        <p>Loading... Please wait while we prepare your download.</p>
-                    </div>
-
-                    <!-- Download link section -->
-                    <div id="download-link" class="mt-2">
-                        <p>Video download ready! Click the link below to download:</p>
-                        <a id="download-button" href="#" class="btn btn-success w-100" download>Download Video</a>
-                    </div>
-
-                    <!-- Error message section -->
-                    <div id="error-message" class="mt-3">
-                        <p>Error downloading video. Please try again.</p>
-                    </div>
+            <div class="d-flex justify-content-center align-items-center flex-column">
+                <div id="loading" class="mt-2">
+                    <p>Loading... Please wait while we prepare your download.</p>
                 </div>
-                <footer class="text-center mt-5">
-                    <p>&copy; 2025 <a href="https://t.me/oppasna">SNA</a>
-                        . All rights reserved.</p>
-                </footer>
+
+                <div id="download-link" class="mt-2">
+                    <p>Video download ready! Click the link below to download:</p>
+                    <a id="download-button" href="#" class="btn btn-success w-100" download>Download Video</a>
+                </div>
+
+                <div id="error-message" class="mt-3">
+                    <p>Error downloading video. Please try again.</p>
+                </div>
+            </div>
+            <footer class="text-center mt-5">
+                <p>&copy; 2025 <a href="https://t.me/oppasna">SNA</a>. All rights reserved.</p>
+            </footer>
         </div>
 
-        <!-- Bootstrap JS link -->
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
         <script>
             document.getElementById('video-form').addEventListener('submit', async function (event) {
                 event.preventDefault();
                 const url = document.getElementById('video-url').value;
 
-                // Show the loading indicator
                 document.getElementById('loading').style.display = 'block';
                 document.getElementById('download-link').style.display = 'none';
                 document.getElementById('error-message').style.display = 'none';
 
-                // Make the POST request to the server
                 const response = await fetch('/download', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: url })
                 });
 
                 const result = await response.json();
-                document.getElementById('loading').style.display = 'none'; // Hide loading
+                document.getElementById('loading').style.display = 'none';
 
                 if (result.success) {
-                    // Show the download link
                     document.getElementById('download-link').style.display = 'block';
                     document.getElementById('download-button').href = result.download_url;
-                    document.getElementById('error-message').style.display = 'none';
                 } else {
-                    // Show the error message
                     document.getElementById('error-message').style.display = 'block';
-                    document.getElementById('download-link').style.display = 'none';
                 }
             });
         </script>
@@ -140,26 +121,31 @@ def index():
 
 @app.route('/download', methods=['POST'])
 def download():
-    """Handle the video URL submission"""
+    """Handle the video URL submission and stream the video"""
     data = request.get_json()
     video_url = data.get('url')
-    
+
     if video_url and video_url.lower().startswith("http"):
         video_file_path = download_video(video_url)
-        
+
         if video_file_path:
-            filename = os.path.basename(video_file_path)
-            download_url = f"/download_file/{filename}"
-            return jsonify(success=True, download_url=download_url)
+            return jsonify(success=True, download_url=f"/stream/{os.path.basename(video_file_path)}")
         else:
             return jsonify(success=False, message="Video download failed. Please try again."), 400
     else:
         return jsonify(success=False, message="Invalid URL. Please provide a valid video URL."), 400
 
-@app.route('/download_file/<filename>')
-def download_file(filename):
-    """Serve the downloaded video file"""
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
+@app.route('/stream/<filename>')
+def stream(filename):
+    """Stream the downloaded video to the user and delete it afterward"""
+    file_path = filename
+
+    def generate():
+        with open(file_path, 'rb') as video_file:
+            yield from video_file
+        os.remove(file_path)  # Delete after streaming
+
+    return Response(generate(), mimetype="video/mp4", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 if __name__ == '__main__':
     app.run(debug=True)
