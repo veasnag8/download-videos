@@ -32,7 +32,7 @@ def download_video(url):
         print(f"[❌] DownloadError: {e}")
         return None
     except Exception as e:
-        print(f"[❌] Error: {e}")
+        print(f"[❌] Unexpected Error: {e}")
         return None
 
 @app.route('/')
@@ -65,7 +65,7 @@ def index():
     <body class="d-flex align-items-center justify-content-center vh-100 bg-light">
         <div class="container">
             <h1 class="text-center mb-5">Welcome To SNA Video Downloader</h1>
-            <h6 class="text-center mb-4">Can download from FaceBook, YouTube, TikTok, Others..</h6>
+            <h6 class="text-center mb-4">Can download from Facebook, YouTube, TikTok, Others..</h6>
             <div class="d-flex justify-content-center">
                 <form id="video-form" action="/download" method="POST" class="w-50">
                     <div class="mb-3">
@@ -158,4 +158,4 @@ def stream(filename):
     return Response(generate(), mimetype="video/mp4", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
