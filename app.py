@@ -5,6 +5,10 @@ from flask import Flask, request, jsonify, Response, render_template_string
 # Initialize Flask app
 app = Flask(__name__)
 
+# Create a directory to store downloaded videos
+DOWNLOAD_FOLDER = "downloads"
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+
 def download_video(url):
     """Download video from any social media platform to a temporary file."""
     ydl_opts = {
@@ -12,7 +16,7 @@ def download_video(url):
         'quiet': False,
         'noplaylist': True,
         'extractaudio': False,
-        'outtmpl': 'temp_video.%(ext)s',  # Save as a temporary file
+        'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
     }
 
     try:
@@ -20,7 +24,7 @@ def download_video(url):
             print(f"Attempting to download video from URL: {url}")
             info_dict = ydl.extract_info(url, download=True)
             video_file_path = ydl.prepare_filename(info_dict)
-        
+
         print("[✅] Video downloaded successfully.")
         return video_file_path
 
@@ -121,7 +125,7 @@ def index():
 
 @app.route('/download', methods=['POST'])
 def download():
-    """Handle the video URL submission and stream the video"""
+    """Handle the video URL submission and prepare for download"""
     data = request.get_json()
     video_url = data.get('url')
 
@@ -137,8 +141,11 @@ def download():
 
 @app.route('/stream/<filename>')
 def stream(filename):
-    """Stream the downloaded video to the user and delete it afterward"""
-    file_path = filename
+    """Stream the downloaded video and delete it afterward"""
+    file_path = os.path.join(DOWNLOAD_FOLDER, filename)
+
+    if not os.path.exists(file_path):
+        return jsonify(success=False, message="File not found"), 404
 
     def generate():
         with open(file_path, 'rb') as video_file:
