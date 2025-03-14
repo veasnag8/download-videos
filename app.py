@@ -28,6 +28,9 @@ def download_video(url):
         print("[✅] Video downloaded successfully.")
         return video_file_path
 
+    except yt_dlp.DownloadError as e:
+        print(f"[❌] DownloadError: {e}")
+        return None
     except Exception as e:
         print(f"[❌] Error: {e}")
         return None
